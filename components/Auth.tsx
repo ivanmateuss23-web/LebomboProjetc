@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { User } from '../types';
-import { Mail, Lock, User as UserIcon, ArrowRight, Loader2, CheckCircle, Chrome } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowRight, Loader2, CheckCircle, Chrome, Bone, GraduationCap } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -113,18 +114,28 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       )}
 
       <div className="bg-white w-full max-w-md rounded-3xl shadow-xl p-8 border border-slate-100 relative z-10">
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-brand-600 rounded-xl mx-auto flex items-center justify-center text-white font-bold text-xl mb-3 shadow-lg shadow-brand-200">
-            LB
+        <div className="flex flex-col items-center mb-8">
+          {/* Logo Construction */}
+          <div className="relative w-24 h-24 bg-black rounded-full flex items-center justify-center shadow-2xl overflow-visible mb-4">
+               {/* Bone vertical inside circle */}
+               <Bone 
+                  className="text-white fill-white absolute top-7" 
+                  size={48} 
+                  strokeWidth={1.5} 
+                  style={{ transform: 'rotate(90deg)' }}
+               />
+               {/* Graduation Cap on top */}
+               <GraduationCap 
+                  className="text-white fill-black absolute -top-3 z-10" 
+                  size={64} 
+                  strokeWidth={1.5} 
+               />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">
-            {view === 'login' && 'Bem-vindo de volta'}
-            {view === 'register' && 'Crie sua conta'}
-            {view === 'verify' && 'Verifique seu email'}
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {view === 'login' && 'Entre para continuar seus estudos.'}
-            {view === 'register' && 'Comece sua jornada de aprendizado.'}
+
+          <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Lebombo</h1>
+          <p className="text-slate-400 text-sm mt-1 font-medium">
+            {view === 'login' && 'Domine seu aprendizado.'}
+            {view === 'register' && 'Comece sua jornada.'}
             {view === 'verify' && `Enviamos um código para ${email}`}
           </p>
         </div>

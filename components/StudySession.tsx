@@ -47,8 +47,7 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [aiFeedback, setAiFeedback] = useState<AIFeedback | null>(null);
   
-  // --- New States for History and Auto Advance ---
-  const [isAutoAdvancing, setIsAutoAdvancing] = useState(false);
+  // --- New States for History ---
   const [lastReviewData, setLastReviewData] = useState<ReviewData | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   
@@ -96,17 +95,6 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
         setUserAnswer(pairStrings.join('\n'));
     }
   }, [matchingMatches, currentCard]);
-
-  // Auto Advance Effect
-  useEffect(() => {
-    if (isAutoAdvancing) {
-        const timer = setTimeout(() => {
-            handleRating(5);
-        }, 1500); // 1.5s delay
-        return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAutoAdvancing]);
   
   const progressPct = Math.round((masteredInSession.size / totalUniqueCards.current) * 100);
 
@@ -207,9 +195,17 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
   };
 
 
-  const handleCheckAnswer = async () => {
+  const handleCheckAnswer = async (immediateAnswer?: string) => {
+    // If an immediate answer is passed (click), use it. Otherwise use state.
+    const answerToCheck = immediateAnswer || userAnswer;
+    
+    // Ensure state is updated for display purposes if immediate answer was provided
+    if (immediateAnswer) {
+        setUserAnswer(immediateAnswer);
+    }
+
     // Basic validation
-    if (currentCard.type !== QuestionType.MATCHING && !userAnswer.trim()) {
+    if (currentCard.type !== QuestionType.MATCHING && !answerToCheck.trim()) {
       setIsFlipped(true); // Allow flip without answer for thinking
       return;
     }
@@ -220,8 +216,8 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
 
     // 1. Multiple Choice Local Check
     if (currentCard.type === QuestionType.MULTIPLE_CHOICE) {
-        const isMatch = currentCard.back.toLowerCase().includes(userAnswer.toLowerCase()) || 
-                        userAnswer.toLowerCase().includes(currentCard.back.toLowerCase());
+        const isMatch = currentCard.back.toLowerCase().includes(answerToCheck.toLowerCase()) || 
+                        answerToCheck.toLowerCase().includes(currentCard.back.toLowerCase());
         
         feedback = {
             score: isMatch ? 5 : 1,
@@ -231,7 +227,7 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
     } 
     // 2. True / False Local Check
     else if (currentCard.type === QuestionType.TRUE_FALSE) {
-        const isMatch = userAnswer.toLowerCase() === currentCard.back.toLowerCase();
+        const isMatch = answerToCheck.toLowerCase() === currentCard.back.toLowerCase();
         
         feedback = {
             score: isMatch ? 5 : 1,
@@ -265,31 +261,40 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
     }
     // 4. Concept Card (Open) - AI Check
     else {
-        feedback = await evaluateAnswer(currentCard.front, currentCard.back, userAnswer);
+        feedback = await evaluateAnswer(currentCard.front, currentCard.back, answerToCheck);
     }
 
     setAiFeedback(feedback);
     setIsEvaluating(false);
-    setIsFlipped(true);
 
-    // --- Auto Advance Logic ---
-    // If it's an objective question AND answer is correct, trigger auto-advance
-    if (
-        (currentCard.type === QuestionType.MULTIPLE_CHOICE || 
+    // --- Logic for Immediate Advance vs Explanation ---
+    
+    // Check if it's an objective question type
+    const isObjective = (
+         currentCard.type === QuestionType.MULTIPLE_CHOICE || 
          currentCard.type === QuestionType.TRUE_FALSE || 
-         currentCard.type === QuestionType.MATCHING) && 
-        feedback.isCorrect
-    ) {
-        setIsAutoAdvancing(true);
+         currentCard.type === QuestionType.MATCHING
+    );
+
+    if (isObjective && feedback.isCorrect) {
+        // If correct AND objective: Skip explanation, rate immediately as 5 (Perfect)
+        // We pass feedback directly because setAiFeedback is async and handleRating needs it now
+        handleRating(5, feedback);
+    } else {
+        // If incorrect OR open-ended: Show explanation
+        setIsFlipped(true);
     }
   };
 
-  const handleRating = (rating: Rating) => {
+  const handleRating = (rating: Rating, overrideFeedback?: AIFeedback) => {
+    // Use overrideFeedback if provided (for instant transitions), otherwise use state
+    const feedbackToSave = overrideFeedback || aiFeedback;
+
     // 1. Save History before moving
     setLastReviewData({
         card: currentCard,
         userAnswer: userAnswer,
-        feedback: aiFeedback
+        feedback: feedbackToSave
     });
 
     const newResults = sessionResults.filter(r => r.cardId !== currentCard.id);
@@ -338,14 +343,12 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
     setIsEvaluating(false);
     setMatchingMatches({});
     setMatchingSelectedLeft(null);
-    setIsAutoAdvancing(false);
   };
 
   const RatingButton = ({ rating, label, color, shortcut }: { rating: Rating, label: string, color: string, shortcut?: string }) => (
     <button
       onClick={() => handleRating(rating)}
-      disabled={isAutoAdvancing}
-      className={`flex-1 py-3 px-2 rounded-xl font-semibold text-sm transition-transform active:scale-95 border-b-4 ${color} ${isAutoAdvancing ? 'opacity-50 cursor-not-allowed' : ''}`}
+      className={`flex-1 py-3 px-2 rounded-xl font-semibold text-sm transition-transform active:scale-95 border-b-4 ${color}`}
     >
       <div className="flex flex-col items-center">
         <span>{label}</span>
@@ -569,8 +572,8 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
                     {currentCard.options.map((opt, idx) => (
                       <button 
                         key={idx}
-                        onClick={() => setUserAnswer(opt)}
-                        disabled={isEvaluating || isAutoAdvancing}
+                        onClick={() => handleCheckAnswer(opt)}
+                        disabled={isEvaluating}
                         className={`w-full p-4 border rounded-xl text-left transition-all flex items-start gap-3 group bg-white/80 hover:bg-white ${
                             userAnswer === opt 
                             ? 'border-brand-500 ring-1 ring-brand-500' 
@@ -592,8 +595,8 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
               {currentCard.type === QuestionType.TRUE_FALSE && !isFlipped && (
                   <div className="grid grid-cols-2 gap-4 mt-8">
                       <button 
-                        onClick={() => setUserAnswer('Verdadeiro')}
-                        disabled={isEvaluating || isAutoAdvancing}
+                        onClick={() => handleCheckAnswer('Verdadeiro')}
+                        disabled={isEvaluating}
                         className={`p-6 rounded-xl border-2 text-lg font-bold transition-all ${
                             userAnswer === 'Verdadeiro' 
                             ? 'border-green-500 bg-green-50 text-green-700' 
@@ -603,8 +606,8 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
                           Verdadeiro
                       </button>
                       <button 
-                        onClick={() => setUserAnswer('Falso')}
-                        disabled={isEvaluating || isAutoAdvancing}
+                        onClick={() => handleCheckAnswer('Falso')}
+                        disabled={isEvaluating}
                         className={`p-6 rounded-xl border-2 text-lg font-bold transition-all ${
                             userAnswer === 'Falso' 
                             ? 'border-red-500 bg-red-50 text-red-700' 
@@ -629,7 +632,7 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
                                   <div key={pair.left} className="relative">
                                      <button
                                         onClick={() => handleMatchingLeftClick(pair.left)}
-                                        disabled={isMatched || isEvaluating || isAutoAdvancing}
+                                        disabled={isMatched || isEvaluating}
                                         className={`w-full p-3 text-sm text-left rounded-lg border-2 transition-all ${
                                             isMatched 
                                             ? 'bg-green-50 border-green-200 text-green-800'
@@ -643,7 +646,7 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
                                      {isMatched && (
                                          <button 
                                             onClick={() => handleMatchingResetPair(pair.left)}
-                                            disabled={isEvaluating || isAutoAdvancing}
+                                            disabled={isEvaluating}
                                             className="absolute -right-2 -top-2 bg-red-100 text-red-500 rounded-full p-0.5 shadow-sm hover:bg-red-200"
                                          >
                                              <X size={12}/>
@@ -666,7 +669,7 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
                                    <button
                                       key={idx}
                                       onClick={() => handleMatchingRightClick(rightItem)}
-                                      disabled={(isAssigned && !matchingSelectedLeft) || isEvaluating || isAutoAdvancing} 
+                                      disabled={(isAssigned && !matchingSelectedLeft) || isEvaluating} 
                                       className={`w-full p-3 text-sm text-left rounded-lg border-2 transition-all ${
                                           isAssigned
                                           ? 'bg-green-50 border-green-200 text-green-800 opacity-60'
@@ -687,45 +690,42 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
         {/* Answer Section */}
         <div className="w-full max-w-4xl space-y-4 pb-10">
             {!isFlipped ? (
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                    {/* Open Text Input for Concept Cards Only */}
-                    {currentCard.type === QuestionType.CONCEPT_CARD && (
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Sua Resposta</label>
-                            <textarea
-                                value={userAnswer}
-                                onChange={(e) => setUserAnswer(e.target.value)}
-                                placeholder="Digite sua resposta aqui para o Lebombo avaliar..."
-                                className="w-full p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none min-h-[120px] bg-white"
-                            />
-                        </div>
-                    )}
-                    
-                    <button
-                        onClick={handleCheckAnswer}
-                        disabled={isEvaluating}
-                        className="w-full bg-slate-900 text-white font-bold text-lg py-3 rounded-xl shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                        {isEvaluating ? (
-                            <>Avaliando... <RefreshCw className="animate-spin" size={20}/></>
-                        ) : (
-                            <>Verificar Resposta <Send size={20} /></>
+                // Only show verify container for complex types (Open Ended or Matching)
+                // For Multiple Choice and True/False, the interaction is instant on click
+                (currentCard.type === QuestionType.CONCEPT_CARD || currentCard.type === QuestionType.MATCHING) && (
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        {/* Open Text Input for Concept Cards Only */}
+                        {currentCard.type === QuestionType.CONCEPT_CARD && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Sua Resposta</label>
+                                <textarea
+                                    value={userAnswer}
+                                    onChange={(e) => setUserAnswer(e.target.value)}
+                                    placeholder="Digite sua resposta aqui para o Lebombo avaliar..."
+                                    className="w-full p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none min-h-[120px] bg-white"
+                                />
+                            </div>
                         )}
-                    </button>
-                </div>
+                        
+                        <button
+                            onClick={() => handleCheckAnswer()}
+                            disabled={isEvaluating}
+                            className="w-full bg-slate-900 text-white font-bold text-lg py-3 rounded-xl shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                            {isEvaluating ? (
+                                <>Avaliando... <RefreshCw className="animate-spin" size={20}/></>
+                            ) : (
+                                <>Verificar Resposta <Send size={20} /></>
+                            )}
+                        </button>
+                    </div>
+                )
             ) : (
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="space-y-4"
                 >
-                    {/* Auto Advance Message */}
-                    {isAutoAdvancing && (
-                        <div className="bg-green-100 text-green-700 p-3 rounded-lg text-center font-bold animate-pulse">
-                            Resposta Correta! Avançando...
-                        </div>
-                    )}
-
                     {/* Comparison View */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className={`p-5 rounded-2xl border-2 ${
@@ -809,7 +809,7 @@ const StudySession: React.FC<StudySessionProps> = ({ deckTitle, cards, onComplet
                                 <RefreshCw size={12}/> Vamos insistir nesta questão. Ela voltará em breve!
                             </p>
                         )}
-                        {(aiFeedback?.isCorrect || (aiFeedback?.score ?? 0) >= 3) && currentCardSuccess === 0 && !isAutoAdvancing && (
+                        {(aiFeedback?.isCorrect || (aiFeedback?.score ?? 0) >= 3) && currentCardSuccess === 0 && (
                              <p className="text-center text-xs text-blue-500 mt-2 font-medium flex items-center justify-center gap-1">
                                 <RefreshCw size={12}/> Muito bem! Acerte mais 1 vez para concluir este card.
                             </p>

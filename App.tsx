@@ -376,7 +376,7 @@ const App: React.FC = () => {
       {/* --- HEADER --- */}
       {view === 'dashboard' && (
         <header className="bg-white/90 backdrop-blur-md sticky top-0 z-30 border-b border-slate-200">
-            <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-center sm:justify-between">
                 <div className="flex items-center gap-3">
                     {/* Le Bombo Logo - Updated to match the requested Image */}
                     <div className="flex items-center gap-2.5 select-none cursor-pointer hover:opacity-90 transition-opacity group">
@@ -399,7 +399,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 
-                <div className="flex items-center gap-4">
+                <div className="hidden sm:flex items-center gap-4">
                     {/* Theme Picker */}
                     <div className="relative">
                         <button 
@@ -450,6 +450,44 @@ const App: React.FC = () => {
                     </button>
                 </div>
             </div>
+            
+             {/* Mobile Controls */}
+             <div className="sm:hidden px-6 pb-4 flex items-center justify-between gap-4">
+                 <button 
+                        onClick={() => setShowThemePicker(!showThemePicker)}
+                        className="p-2 rounded-full bg-slate-100 text-slate-600"
+                    >
+                        <Palette size={20} />
+                </button>
+                 {showThemePicker && (
+                            <div className="absolute left-6 mt-12 bg-white rounded-xl shadow-xl border border-slate-100 p-4 w-64 grid grid-cols-4 gap-2 z-50">
+                                <p className="col-span-4 text-xs font-bold text-slate-400 mb-2 uppercase">Cor de Fundo</p>
+                                {[
+                                    '#f8fafc', // Slate
+                                    '#f0fdf4', // Green
+                                    '#eff6ff', // Blue
+                                    '#faf5ff', // Purple
+                                    '#fff1f2', // Rose
+                                    '#fffbeb', // Amber
+                                    '#ecfeff', // Cyan
+                                    '#1e293b'  // Dark (Partial support)
+                                ].map(c => (
+                                    <button 
+                                        key={c}
+                                        onClick={() => { setAppBg(c); setShowThemePicker(false); }}
+                                        className={`w-8 h-8 rounded-full border-2 ${appBg === c ? 'border-brand-600' : 'border-slate-200'}`}
+                                        style={{ backgroundColor: c }}
+                                    />
+                                ))}
+                            </div>
+                 )}
+                 <button 
+                    onClick={() => setView('creating')}
+                    className="flex-1 flex items-center justify-center gap-2 bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700 font-medium shadow-sm"
+                >
+                    <Plus size={18} /> Novo Plano
+                </button>
+             </div>
         </header>
       )}
 
